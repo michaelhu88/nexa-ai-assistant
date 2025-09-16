@@ -28,6 +28,8 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
+import { messageInterceptor } from '~/lib/services/messageInterceptor';
+import { messageInterceptorStore } from '~/lib/stores/messageInterceptor';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -420,7 +422,7 @@ export const ChatImpl = memo(
     };
 
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
-      const messageContent = messageInput || input;
+      let messageContent = messageInput || input;
 
       if (!messageContent?.trim()) {
         return;
@@ -429,6 +431,70 @@ export const ChatImpl = memo(
       if (isLoading) {
         abort();
         return;
+      }
+
+      // Check if message should be intercepted
+      const interceptResult = messageInterceptor.intercept(messageContent);
+
+      if (interceptResult.intercepted) {
+        // Record the interception
+        messageInterceptorStore.recordInterception(messageContent, interceptResult.metadata?.ruleId || 'unknown');
+
+        if (interceptResult.shouldBypassAI) {
+          // Handle bypass: show response without AI processing
+          if (interceptResult.response) {
+            // Add user message
+            const userMessageId = `user-${Date.now()}`;
+            const assistantMessageId = `assistant-${Date.now()}`;
+
+            // Handle special commands
+            if (interceptResult.metadata?.clearHistory) {
+              // Clear chat history
+              setMessages([]);
+              setChatStarted(false);
+
+              return;
+            }
+
+            // Add both user message and intercepted response
+            const newMessages = [
+              ...messages,
+              {
+                id: userMessageId,
+                role: 'user' as const,
+                content: messageContent,
+              },
+              {
+                id: assistantMessageId,
+                role: 'assistant' as const,
+                content: interceptResult.response,
+              },
+            ];
+
+            setMessages(newMessages);
+
+            // Store in history
+            storeMessageHistory(newMessages).catch((error) => toast.error(error.message));
+          }
+
+          // Clear input and reset form
+          setInput('');
+          setUploadedFiles([]);
+          setImageDataList([]);
+          resetEnhancer();
+          textareaRef.current?.blur();
+
+          if (!chatStarted) {
+            setChatStarted(true);
+          }
+
+          return; // Exit early, don't proceed to AI
+        }
+
+        // If transformed message, use the transformed version
+        if (interceptResult.transformedMessage) {
+          messageContent = interceptResult.transformedMessage;
+        }
       }
 
       let finalMessageContent = messageContent;
