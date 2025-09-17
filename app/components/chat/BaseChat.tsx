@@ -33,6 +33,9 @@ import { ChatBox } from './ChatBox';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import LlmErrorAlert from './LLMApiAlert';
+import type { ExecutionPlan } from '~/lib/stores/agentState';
+import { PlanApproval } from './PlanApproval';
+import { AgentStateIndicator } from './AgentStateIndicator';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -81,6 +84,14 @@ interface BaseChatProps {
   selectedElement?: ElementInfo | null;
   setSelectedElement?: (element: ElementInfo | null) => void;
   addToolResult?: ({ toolCallId, result }: { toolCallId: string; result: any }) => void;
+  currentPlan?: ExecutionPlan | null;
+  isGeneratingPlan?: boolean;
+  planError?: string | null;
+  onPlanApprove?: () => void;
+  onPlanReject?: () => void;
+  onPlanModify?: (modifiedPlan: ExecutionPlan) => void;
+  onPlanReplan?: (feedback: string) => void;
+  pendingMessage?: string;
 }
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -130,6 +141,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       addToolResult = () => {
         throw new Error('addToolResult not implemented');
       },
+      currentPlan,
+      isGeneratingPlan,
+      planError,
+      onPlanApprove,
+      onPlanReject,
+      onPlanModify,
+      onPlanReplan,
+      pendingMessage,
     },
     ref,
   ) => {
@@ -356,6 +375,38 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                   Bring ideas to life in seconds or get help on existing projects.
                 </p>
+              </div>
+            )}
+
+            {/* Planning Mode UI */}
+            {!chatStarted && currentPlan && (
+              <div className="max-w-4xl mx-auto px-4 lg:px-0 mt-8">
+                <PlanApproval
+                  plan={currentPlan}
+                  userMessage={pendingMessage}
+                  onApprove={onPlanApprove}
+                  onReject={onPlanReject}
+                  onModify={onPlanModify}
+                  onReplan={onPlanReplan}
+                />
+              </div>
+            )}
+
+            {/* Planning Status Indicator */}
+            {!chatStarted && (isGeneratingPlan || currentPlan) && (
+              <div className="max-w-4xl mx-auto px-4 lg:px-0 mt-4">
+                <AgentStateIndicator showDetails={true} />
+              </div>
+            )}
+
+            {/* Plan Generation Error */}
+            {!chatStarted && planError && (
+              <div className="max-w-4xl mx-auto px-4 lg:px-0 mt-4">
+                <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                  <h3 className="font-semibold mb-2">Plan Generation Failed</h3>
+                  <p className="text-sm">{planError}</p>
+                  <p className="text-sm mt-2">The system will proceed with direct execution.</p>
+                </div>
               </div>
             )}
             <StickToBottom

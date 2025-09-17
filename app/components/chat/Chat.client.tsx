@@ -30,6 +30,9 @@ import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { messageInterceptor } from '~/lib/services/messageInterceptor';
 import { messageInterceptorStore } from '~/lib/stores/messageInterceptor';
+import { agentStateStore, processEvent, type ExecutionPlan } from '~/lib/stores/agentState';
+import { generateExecutionPlan } from '~/lib/services/planGenerator';
+import { analyzeMessageComplexity } from '~/lib/services/messageAnalyzer';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -151,6 +154,12 @@ export const ChatImpl = memo(
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const mcpSettings = useMCPStore((state) => state.settings);
+
+    // Planning state management
+    const [currentPlan, setCurrentPlan] = useState<ExecutionPlan | null>(null);
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [planError, setPlanError] = useState<string | null>(null);
+    const [pendingMessage, setPendingMessage] = useState<string>('');
 
     const {
       messages,
@@ -421,6 +430,269 @@ export const ChatImpl = memo(
       return attachments;
     };
 
+    const handlePlanMode = async (messageContent: string) => {
+      try {
+        setIsGeneratingPlan(true);
+        setPlanError(null);
+        setPendingMessage(messageContent);
+
+        // Add user message to show what we're planning for
+        const userMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user' as const,
+          content: messageContent,
+        };
+        setMessages([userMessage]);
+
+        // Analyze message complexity (simplified - always treat as complex)
+        const analysis = analyzeMessageComplexity(messageContent);
+
+        // Force use of OpenAI provider with GPT-4o mini for plan generation
+        const openaiProvider = activeProviders.find((p) => p.name === 'OpenAI');
+
+        if (!openaiProvider) {
+          throw new Error('OpenAI provider not available');
+        }
+
+        // Generate execution plan using AI with forced OpenAI GPT-4o mini
+        const plan = await generateExecutionPlan(
+          messageContent,
+          analysis,
+          true, // Use AI
+          openaiProvider,
+          'gpt-4o-mini',
+        );
+
+        setCurrentPlan(plan);
+        processEvent({ type: 'PLAN_GENERATED', plan });
+
+        // Clear input after plan generation
+        setInput('');
+        setUploadedFiles([]);
+        setImageDataList([]);
+        resetEnhancer();
+      } catch (error) {
+        console.error('Plan generation failed:', error);
+        setPlanError(error instanceof Error ? error.message : 'Plan generation failed');
+
+        // Fall back to normal execution if plan generation fails
+        toast.error('Plan generation failed. Proceeding with direct execution.');
+        await proceedWithExecution(messageContent);
+      } finally {
+        setIsGeneratingPlan(false);
+      }
+    };
+
+    const handlePlanApproval = async () => {
+      if (!currentPlan || !pendingMessage) {
+        return;
+      }
+
+      try {
+        processEvent({ type: 'PLAN_APPROVED' });
+        await proceedWithExecution(pendingMessage, currentPlan);
+      } catch (error) {
+        console.error('Plan execution failed:', error);
+        toast.error('Failed to start plan execution');
+      }
+    };
+
+    const handlePlanRejection = () => {
+      processEvent({ type: 'PLAN_REJECTED' });
+      setCurrentPlan(null);
+      setPendingMessage('');
+      setPlanError(null);
+    };
+
+    const handlePlanModification = (modifiedPlan: ExecutionPlan) => {
+      setCurrentPlan(modifiedPlan);
+
+      // Plan is automatically approved after modification
+      processEvent({ type: 'PLAN_APPROVED' });
+    };
+
+    const handlePlanRegeneration = async (feedback: string) => {
+      if (!pendingMessage) {
+        return;
+      }
+
+      try {
+        setIsGeneratingPlan(true);
+        setPlanError(null);
+
+        // Analyze message complexity for regeneration
+        const analysis = analyzeMessageComplexity(pendingMessage);
+
+        // Force use of OpenAI provider with GPT-4o mini for plan regeneration
+        const openaiProvider = activeProviders.find((p) => p.name === 'OpenAI');
+
+        if (!openaiProvider) {
+          throw new Error('OpenAI provider not available');
+        }
+
+        // Generate new plan with feedback using forced OpenAI GPT-4o mini
+        const newPlan = await generateExecutionPlan(
+          pendingMessage,
+          analysis,
+          true, // Use AI
+          openaiProvider,
+          'gpt-4o-mini',
+        );
+
+        setCurrentPlan(newPlan);
+        processEvent({ type: 'PLAN_GENERATED', plan: newPlan });
+      } catch (error) {
+        console.error('Plan regeneration failed:', error);
+        setPlanError(error instanceof Error ? error.message : 'Plan regeneration failed');
+      } finally {
+        setIsGeneratingPlan(false);
+      }
+    };
+
+    const proceedWithExecution = async (messageContent: string, plan?: ExecutionPlan) => {
+      // Start the chat and workbench
+      setChatStarted(true);
+      processEvent({ type: 'EXECUTION_STARTED' });
+
+      // Continue with normal message processing
+      let finalMessageContent = messageContent;
+
+      // If we have an approved plan, include it in the context
+      if (plan) {
+        const planContext = `\n\nAPPROVED EXECUTION PLAN:\n${plan.title}\n${plan.description}\n\nSteps:\n${plan.steps.map((step, i) => `${i + 1}. ${step.description}`).join('\n')}`;
+        finalMessageContent = messageContent + planContext;
+      }
+
+      if (selectedElement) {
+        const elementInfo = `<div class=\"__boltSelectedElement__\" data-element='${JSON.stringify(selectedElement)}'>${JSON.stringify(`${selectedElement.displayText}`)}</div>`;
+        finalMessageContent = finalMessageContent + elementInfo;
+      }
+
+      runAnimation();
+
+      // Handle template selection if enabled
+      if (autoSelectTemplate) {
+        setFakeLoading(true);
+
+        try {
+          const { template, title } = await selectStarterTemplate({
+            message: finalMessageContent,
+            model,
+            provider,
+          });
+
+          if (template !== 'blank') {
+            const temResp = await getTemplates(template, title).catch((e) => {
+              if (e.message.includes('rate limit')) {
+                toast.warning('Rate limit exceeded. Skipping starter template\n Continuing with blank template');
+              } else {
+                toast.warning('Failed to import starter template\n Continuing with blank template');
+              }
+
+              return null;
+            });
+
+            if (temResp) {
+              const { assistantMessage, userMessage } = temResp;
+              const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+
+              setMessages([
+                {
+                  id: `1-${new Date().getTime()}`,
+                  role: 'user',
+                  content: userMessageText,
+                  parts: createMessageParts(userMessageText, imageDataList),
+                },
+                {
+                  id: `2-${new Date().getTime()}`,
+                  role: 'assistant',
+                  content: assistantMessage,
+                },
+                {
+                  id: `3-${new Date().getTime()}`,
+                  role: 'user',
+                  content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userMessage}`,
+                  annotations: ['hidden'],
+                },
+              ]);
+
+              const reloadOptions =
+                uploadedFiles.length > 0
+                  ? { experimental_attachments: await filesToAttachments(uploadedFiles) }
+                  : undefined;
+
+              reload(reloadOptions);
+              setFakeLoading(false);
+
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Template selection failed:', error);
+        }
+
+        // If autoSelectTemplate is disabled or template selection failed
+        const userMessageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+        const attachments = uploadedFiles.length > 0 ? await filesToAttachments(uploadedFiles) : undefined;
+
+        setMessages([
+          {
+            id: `${new Date().getTime()}`,
+            role: 'user',
+            content: userMessageText,
+            parts: createMessageParts(userMessageText, imageDataList),
+            experimental_attachments: attachments,
+          },
+        ]);
+        reload(attachments ? { experimental_attachments: attachments } : undefined);
+        setFakeLoading(false);
+
+        return;
+      }
+
+      // Direct execution without template
+      const modifiedFiles = workbenchStore.getModifiedFiles();
+      chatStore.setKey('aborted', false);
+
+      if (modifiedFiles !== undefined) {
+        const userUpdateArtifact = filesToArtifacts(modifiedFiles, `${Date.now()}`);
+        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userUpdateArtifact}${finalMessageContent}`;
+
+        const attachmentOptions =
+          uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
+
+        append(
+          {
+            role: 'user',
+            content: messageText,
+            parts: createMessageParts(messageText, imageDataList),
+          },
+          attachmentOptions,
+        );
+
+        workbenchStore.resetAllFileModifications();
+      } else {
+        const messageText = `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${finalMessageContent}`;
+
+        const attachmentOptions =
+          uploadedFiles.length > 0 ? { experimental_attachments: await filesToAttachments(uploadedFiles) } : undefined;
+
+        append(
+          {
+            role: 'user',
+            content: messageText,
+            parts: createMessageParts(messageText, imageDataList),
+          },
+          attachmentOptions,
+        );
+      }
+
+      setUploadedFiles([]);
+      setImageDataList([]);
+      resetEnhancer();
+      textareaRef.current?.blur();
+    };
+
     const sendMessage = async (_event: React.UIEvent, messageInput?: string) => {
       let messageContent = messageInput || input;
 
@@ -495,6 +767,12 @@ export const ChatImpl = memo(
         if (interceptResult.transformedMessage) {
           messageContent = interceptResult.transformedMessage;
         }
+      }
+
+      // Plan Mode: For new chats, trigger planning first
+      if (!chatStarted) {
+        await handlePlanMode(messageContent);
+        return;
       }
 
       let finalMessageContent = messageContent;
@@ -763,6 +1041,14 @@ export const ChatImpl = memo(
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
         addToolResult={addToolResult}
+        currentPlan={currentPlan}
+        isGeneratingPlan={isGeneratingPlan}
+        planError={planError}
+        onPlanApprove={handlePlanApproval}
+        onPlanReject={handlePlanRejection}
+        onPlanModify={handlePlanModification}
+        onPlanReplan={handlePlanRegeneration}
+        pendingMessage={pendingMessage}
       />
     );
   },
