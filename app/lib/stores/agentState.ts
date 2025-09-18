@@ -1,4 +1,4 @@
-import { atom, computed, map } from 'nanostores';
+import { computed, map } from 'nanostores';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('agentState');

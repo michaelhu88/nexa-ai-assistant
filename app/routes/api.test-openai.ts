@@ -3,12 +3,37 @@ import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('api.test-openai');
 
+// Define types for OpenAI API response
+interface OpenAIChoice {
+  message: {
+    content: string;
+    role: string;
+  };
+  finish_reason: string;
+  index: number;
+}
+
+interface OpenAIUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+interface OpenAIResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: OpenAIChoice[];
+  usage: OpenAIUsage;
+}
+
 export async function action({ context, request }: ActionFunctionArgs) {
   try {
     logger.info('Testing OpenAI API connection');
 
     // Get the test message from request body
-    const body = await request.json();
+    const body = (await request.json()) as { message?: string };
     const { message = 'help me make a succinct plan for this project: help me make a bunny nanny app' } = body;
 
     // Get OpenAI API key from environment
@@ -75,7 +100,7 @@ export async function action({ context, request }: ActionFunctionArgs) {
       );
     }
 
-    const responseData = await openaiResponse.json();
+    const responseData = (await openaiResponse.json()) as OpenAIResponse;
     const aiMessage = responseData.choices?.[0]?.message?.content || 'No response content';
 
     logger.info('OpenAI API success', {

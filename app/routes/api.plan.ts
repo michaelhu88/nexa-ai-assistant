@@ -265,7 +265,7 @@ function parseMarkdownPlan(markdownContent: string, originalMessage: string): Pa
 
         break;
 
-      case 'implementation steps':
+      case 'implementation steps': {
         // Look for numbered list items
         const stepMatch = line.match(/^\d+\.\s*\*\*(.*?)\*\*\s*-\s*(.*)/);
 
@@ -293,9 +293,10 @@ function parseMarkdownPlan(markdownContent: string, originalMessage: string): Pa
         }
 
         break;
+      }
 
       case 'technologies & tools':
-      case 'technologies':
+      case 'technologies': {
         // Look for bullet points
         const techMatch = line.match(/^-\s*(.*?)(?::\s*(.*))?$/);
 
@@ -304,8 +305,9 @@ function parseMarkdownPlan(markdownContent: string, originalMessage: string): Pa
         }
 
         break;
+      }
 
-      case 'considerations':
+      case 'considerations': {
         // Look for bullet points
         const considerationMatch = line.match(/^-\s*(.*)$/);
 
@@ -314,6 +316,7 @@ function parseMarkdownPlan(markdownContent: string, originalMessage: string): Pa
         }
 
         break;
+      }
     }
   }
 
@@ -408,7 +411,7 @@ function parseAIPlanResponse(aiResponse: string, originalMessage: string, comple
         });
 
         return plan;
-      } catch (jsonError) {
+      } catch {
         // Fall through to plain text processing
       }
     }

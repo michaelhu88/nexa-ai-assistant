@@ -30,7 +30,7 @@ import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { messageInterceptor } from '~/lib/services/messageInterceptor';
 import { messageInterceptorStore } from '~/lib/stores/messageInterceptor';
-import { agentStateStore, processEvent, type ExecutionPlan } from '~/lib/stores/agentState';
+import { processEvent, type ExecutionPlan } from '~/lib/stores/agentState';
 import { generateExecutionPlan } from '~/lib/services/planGenerator';
 import { analyzeMessageComplexity } from '~/lib/services/messageAnalyzer';
 
@@ -511,7 +511,7 @@ export const ChatImpl = memo(
       processEvent({ type: 'PLAN_APPROVED' });
     };
 
-    const handlePlanRegeneration = async (feedback: string) => {
+    const handlePlanRegeneration = async (_feedback: string) => {
       if (!pendingMessage) {
         return;
       }
