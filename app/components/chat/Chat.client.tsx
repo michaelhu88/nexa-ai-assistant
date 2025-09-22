@@ -33,6 +33,9 @@ import { messageInterceptorStore } from '~/lib/stores/messageInterceptor';
 import { processEvent, type ExecutionPlan } from '~/lib/stores/agentState';
 import { generateExecutionPlan } from '~/lib/services/planGenerator';
 import { analyzeMessageComplexity } from '~/lib/services/messageAnalyzer';
+// Template service imports disabled for simplified deployment
+// import { templateDetection } from '~/lib/services/templateDetection';
+// import { templateLoader } from '~/lib/services/templateLoader';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -570,6 +573,73 @@ export const ChatImpl = memo(
 
       runAnimation();
 
+      // Template Detection: Disabled for simplified deployment
+      /* Template service code commented out - Remove comment block to re-enable
+      try {
+        logger.info('🚀 Starting template detection workflow...');
+
+        // Create updated message list for template detection (include the current message with plan context)
+        const messagesForDetection = [
+          ...messages,
+          {
+            id: `temp-${Date.now()}`,
+            role: 'user' as const,
+            content: finalMessageContent,
+          },
+        ];
+
+        logger.info(`📨 Message content for detection: "${finalMessageContent}"`);
+        logger.info(`📚 Total messages in conversation: ${messagesForDetection.length}`);
+
+        toast.info('🔍 Checking for matching templates...');
+
+        const detectedTemplate = await templateDetection.detectTemplateFromConversation(messagesForDetection);
+
+        if (detectedTemplate) {
+          logger.info(`✅ Template detected: ${detectedTemplate.name}`);
+          toast.info(`🎯 Template found: ${detectedTemplate.name}`);
+
+          // Validate that template can be loaded
+          logger.info('🔄 Validating template can be loaded...');
+          const validation = await templateLoader.validateTemplateLoad(detectedTemplate);
+
+          logger.info(`📋 Validation result: canLoad=${validation.canLoad}, reason="${validation.reason || 'none'}"`);
+
+          if (validation.canLoad) {
+            // Show loading message
+            toast.info(`⬇️ Loading template: ${detectedTemplate.name}...`);
+
+            // Load template into workbench
+            const loadResult = await templateLoader.loadTemplateIntoWorkbench(detectedTemplate);
+
+            if (loadResult.success) {
+              logger.info(`✅ Template loaded successfully: ${loadResult.filesLoaded} files`);
+              toast.success(`✅ Template loaded: ${detectedTemplate.name} (${loadResult.filesLoaded} files)`);
+
+              // Add template context to the message
+              finalMessageContent =
+                finalMessageContent +
+                `\n\n[TEMPLATE_LOADED: ${detectedTemplate.name} - Template files have been loaded into the workbench. Please only run 'npm install' and 'npm run dev' to set up the template. Do not make any other modifications.]`;
+            } else {
+              logger.error(`❌ Template loading failed: ${loadResult.error}`);
+              toast.warning(`❌ Failed to load template: ${loadResult.error}`);
+            }
+          } else {
+            logger.warn(`❌ Template validation failed: ${validation.reason}`);
+            toast.warning(`⚠️ Cannot load template: ${validation.reason}`);
+          }
+        } else {
+          logger.info('❌ No template detected');
+          toast.info('ℹ️ No matching templates found');
+        }
+      } catch (error) {
+        logger.error('💥 Template detection/loading failed:', error);
+        toast.error(`❌ Template system error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+        // Continue with normal processing even if template detection fails
+      }
+      */
+
       // Handle template selection if enabled
       if (autoSelectTemplate) {
         setFakeLoading(true);
@@ -884,6 +954,74 @@ export const ChatImpl = memo(
       if (error != null) {
         setMessages(messages.slice(0, -1));
       }
+
+
+      // Template Detection: Disabled for simplified deployment (workbench messages)
+      /* Template service code commented out - Remove comment block to re-enable
+      try {
+        logger.info('🚀 Starting template detection for workbench message...');
+
+        // Create updated message list for template detection
+        const messagesForDetection = [
+          ...messages,
+          {
+            id: `temp-${Date.now()}`,
+            role: 'user' as const,
+            content: finalMessageContent,
+          },
+        ];
+
+        logger.info(`📨 Workbench message content for detection: "${finalMessageContent}"`);
+        logger.info(`📚 Total messages in conversation: ${messagesForDetection.length}`);
+
+        toast.info('🔍 Checking for matching templates...');
+
+        const detectedTemplate = await templateDetection.detectTemplateFromConversation(messagesForDetection);
+
+        if (detectedTemplate) {
+          logger.info(`✅ Template detected: ${detectedTemplate.name}`);
+          toast.info(`🎯 Template found: ${detectedTemplate.name}`);
+
+          // Validate that template can be loaded
+          logger.info('🔄 Validating template can be loaded...');
+          const validation = await templateLoader.validateTemplateLoad(detectedTemplate);
+
+          logger.info(`📋 Validation result: canLoad=${validation.canLoad}, reason="${validation.reason || 'none'}"`);
+
+          if (validation.canLoad) {
+            // Show loading message
+            toast.info(`⬇️ Loading template: ${detectedTemplate.name}...`);
+
+            // Load template into workbench
+            const loadResult = await templateLoader.loadTemplateIntoWorkbench(detectedTemplate);
+
+            if (loadResult.success) {
+              logger.info(`✅ Template loaded successfully: ${loadResult.filesLoaded} files`);
+              toast.success(`✅ Template loaded: ${detectedTemplate.name} (${loadResult.filesLoaded} files)`);
+
+              // Add template context to the message
+              finalMessageContent =
+                finalMessageContent +
+                `\n\n[TEMPLATE_LOADED: ${detectedTemplate.name} - Template files have been loaded into the workbench. Please only run 'npm install' and 'npm run dev' to set up the template. Do not make any other modifications.]`;
+            } else {
+              logger.error(`❌ Template loading failed: ${loadResult.error}`);
+              toast.warning(`❌ Failed to load template: ${loadResult.error}`);
+            }
+          } else {
+            logger.warn(`❌ Template validation failed: ${validation.reason}`);
+            toast.warning(`⚠️ Cannot load template: ${validation.reason}`);
+          }
+        } else {
+          logger.info('❌ No template detected');
+          toast.info('ℹ️ No matching templates found');
+        }
+      } catch (error) {
+        logger.error('💥 Template detection/loading failed:', error);
+        toast.error(`❌ Template system error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+        // Continue with normal processing even if template detection fails
+      }
+      */
 
       const modifiedFiles = workbenchStore.getModifiedFiles();
 
