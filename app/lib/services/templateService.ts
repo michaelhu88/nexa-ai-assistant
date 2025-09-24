@@ -14,13 +14,13 @@ export interface Template {
 }
 
 class TemplateService {
-  private supabaseClient: SupabaseClient | null = null;
+  private _supabaseClient: SupabaseClient | null = null;
 
   /**
    * Get or create Supabase client for template database
    */
-  private getTemplateClient(): SupabaseClient {
-    if (!this.supabaseClient) {
+  private _getTemplateClient(): SupabaseClient {
+    if (!this._supabaseClient) {
       const url = import.meta.env?.VITE_SUPABASE_TEMPLATE_URL;
       const anonKey = import.meta.env?.VITE_SUPABASE_TEMPLATE_ANON_KEY;
 
@@ -28,17 +28,17 @@ class TemplateService {
         throw new Error('Supabase template credentials not configured. Please check your .env file.');
       }
 
-      this.supabaseClient = createClient(url, anonKey);
+      this._supabaseClient = createClient(url, anonKey);
       logger.info('Supabase template client initialized with anon key');
     }
 
-    return this.supabaseClient;
+    return this._supabaseClient;
   }
 
   /**
    * Get Supabase client with service role for storage operations
    */
-  private getServiceClient(): SupabaseClient {
+  private _getServiceClient(): SupabaseClient {
     const url = import.meta.env?.VITE_SUPABASE_TEMPLATE_URL;
     const serviceKey = import.meta.env?.SUPABASE_TEMPLATE_SERVICE_ROLE_KEY;
 
@@ -54,7 +54,7 @@ class TemplateService {
    */
   async listTemplates(): Promise<Template[]> {
     try {
-      const client = this.getTemplateClient();
+      const client = this._getTemplateClient();
 
       const { data, error } = await client.from('templates').select('*').order('created_at', { ascending: false });
 
@@ -77,7 +77,7 @@ class TemplateService {
    */
   async getTemplateByName(name: string): Promise<Template | null> {
     try {
-      const client = this.getTemplateClient();
+      const client = this._getTemplateClient();
 
       const { data, error } = await client.from('templates').select('*').eq('name', name).single();
 
@@ -107,7 +107,7 @@ class TemplateService {
   async getTemplateDownloadUrl(storagePath: string): Promise<string> {
     try {
       // Use service client for storage operations due to RLS restrictions
-      const client = this.getServiceClient();
+      const client = this._getServiceClient();
       const bucketName = 'templates';
 
       // Create a signed URL that expires in 1 hour
@@ -136,7 +136,7 @@ class TemplateService {
    */
   async searchTemplates(query: string): Promise<Template[]> {
     try {
-      const client = this.getTemplateClient();
+      const client = this._getTemplateClient();
       const searchTerm = query.toLowerCase();
 
       // First, get all templates (since we need to search in array field)
@@ -176,7 +176,7 @@ class TemplateService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const client = this.getTemplateClient();
+      const client = this._getTemplateClient();
 
       // Try to fetch templates with limit 1 to test connection
       const { error } = await client.from('templates').select('id').limit(1);

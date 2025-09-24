@@ -11,18 +11,18 @@ export interface TemplateMatch {
 }
 
 export class TemplateDetectionService {
-  private readonly _MINIMUM_KEYWORD_MATCHES = 3;
+  private readonly _minimumKeywordMatches = 3;
   private _templateCache: Template[] = [];
   private _lastCacheUpdate = 0;
-  private readonly _CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly _cacheTtl = 5 * 60 * 1000; // 5 minutes
 
   /**
    * Get all templates with caching
    */
-  private async getTemplates(): Promise<Template[]> {
+  private async _getTemplates(): Promise<Template[]> {
     const now = Date.now();
 
-    if (this._templateCache.length === 0 || now - this._lastCacheUpdate > this._CACHE_TTL) {
+    if (this._templateCache.length === 0 || now - this._lastCacheUpdate > this._cacheTtl) {
       try {
         this._templateCache = await templateService.listTemplates();
         this._lastCacheUpdate = now;
@@ -39,7 +39,7 @@ export class TemplateDetectionService {
   /**
    * Extract all text content from conversation messages
    */
-  private extractConversationText(messages: Message[]): string {
+  private _extractConversationText(messages: Message[]): string {
     return messages
       .map((message) => {
         if (typeof message.content === 'string') {
@@ -56,7 +56,7 @@ export class TemplateDetectionService {
   /**
    * Score how well a template matches the conversation text
    */
-  private scoreTemplateMatch(conversationText: string, template: Template): TemplateMatch {
+  private _scoreTemplateMatch(conversationText: string, template: Template): TemplateMatch {
     if (!template.keywords || !Array.isArray(template.keywords)) {
       logger.debug(`⚠️ Template "${template.name}" has no keywords or invalid keywords array`);
       return {
@@ -111,10 +111,10 @@ export class TemplateDetectionService {
       }
 
       // Convert messages to simple format for API
-      const apiMessages = messages.map(msg => ({
+      const apiMessages = messages.map((msg) => ({
         id: msg.id,
         role: msg.role,
-        content: typeof msg.content === 'string' ? msg.content : ''
+        content: typeof msg.content === 'string' ? msg.content : '',
       }));
 
       logger.info(`📨 Sending ${apiMessages.length} messages to template detection API`);
@@ -126,16 +126,18 @@ export class TemplateDetectionService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: apiMessages
-        })
+          messages: apiMessages,
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(`Template detection API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`);
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(
+          `Template detection API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`,
+        );
       }
 
-      const result = await response.json() as { success: boolean; template?: Template; error?: string };
+      const result = (await response.json()) as { success: boolean; template?: Template; error?: string };
 
       if (!result.success) {
         throw new Error(`Template detection failed: ${result.error}`);
@@ -153,14 +155,15 @@ export class TemplateDetectionService {
 
       // Fallback to local detection if API fails
       logger.info('🔄 Falling back to local template detection...');
-      return this.detectTemplateFromConversationLocal(messages);
+
+      return this._detectTemplateFromConversationLocal(messages);
     }
   }
 
   /**
    * Local fallback template detection (original implementation)
    */
-  private async detectTemplateFromConversationLocal(messages: Message[]): Promise<Template | null> {
+  private async _detectTemplateFromConversationLocal(messages: Message[]): Promise<Template | null> {
     try {
       logger.info('🔍 Starting local template detection fallback...');
 
@@ -169,8 +172,10 @@ export class TemplateDetectionService {
         return null;
       }
 
-      const conversationText = this.extractConversationText(messages);
-      logger.info(`📝 Extracted conversation text (${conversationText.length} chars): "${conversationText.substring(0, 200)}${conversationText.length > 200 ? '...' : ''}"`);
+      const conversationText = this._extractConversationText(messages);
+      logger.info(
+        `📝 Extracted conversation text (${conversationText.length} chars): "${conversationText.substring(0, 200)}${conversationText.length > 200 ? '...' : ''}"`,
+      );
 
       if (!conversationText.trim()) {
         logger.debug('❌ Conversation text is empty after extraction');
@@ -178,7 +183,8 @@ export class TemplateDetectionService {
       }
 
       logger.debug('🔄 Loading templates from database...');
-      const templates = await this.getTemplates();
+
+      const templates = await this._getTemplates();
       logger.info(`📋 Loaded ${templates.length} templates from database`);
 
       if (templates.length === 0) {
@@ -188,27 +194,39 @@ export class TemplateDetectionService {
 
       // Log each template for debugging
       templates.forEach((template, index) => {
-        logger.debug(`Template ${index + 1}: "${template.name}" with keywords: [${template.keywords?.join(', ') || 'none'}]`);
+        logger.debug(
+          `Template ${index + 1}: "${template.name}" with keywords: [${template.keywords?.join(', ') || 'none'}]`,
+        );
       });
 
       // Score all templates
       logger.debug('🎯 Scoring templates against conversation...');
+
       const matches: TemplateMatch[] = templates
         .map((template) => {
-          const match = this.scoreTemplateMatch(conversationText, template);
-          logger.debug(`🏆 Template "${template.name}" scored ${match.score} points with keywords: [${match.matchedKeywords.join(', ')}]`);
+          const match = this._scoreTemplateMatch(conversationText, template);
+          logger.debug(
+            `🏆 Template "${template.name}" scored ${match.score} points with keywords: [${match.matchedKeywords.join(', ')}]`,
+          );
+
           return match;
         })
         .filter((match) => {
-          const passed = match.score >= this._MINIMUM_KEYWORD_MATCHES;
+          const passed = match.score >= this._minimumKeywordMatches;
+
           if (!passed) {
-            logger.debug(`❌ Template "${match.template.name}" filtered out (score ${match.score} < minimum ${this._MINIMUM_KEYWORD_MATCHES})`);
+            logger.debug(
+              `❌ Template "${match.template.name}" filtered out (score ${match.score} < minimum ${this._minimumKeywordMatches})`,
+            );
           }
+
           return passed;
         })
         .sort((a, b) => b.score - a.score); // Sort by highest score first
 
-      logger.info(`🎯 Found ${matches.length} templates meeting minimum threshold of ${this._MINIMUM_KEYWORD_MATCHES} keywords`);
+      logger.info(
+        `🎯 Found ${matches.length} templates meeting minimum threshold of ${this._minimumKeywordMatches} keywords`,
+      );
 
       if (matches.length === 0) {
         logger.warn('❌ No templates found with minimum keyword matches');
@@ -237,12 +255,12 @@ export class TemplateDetectionService {
         return [];
       }
 
-      const conversationText = this.extractConversationText(messages);
-      const templates = await this.getTemplates();
+      const conversationText = this._extractConversationText(messages);
+      const templates = await this._getTemplates();
 
       return templates
-        .map((template) => this.scoreTemplateMatch(conversationText, template))
-        .filter((match) => match.score >= this._MINIMUM_KEYWORD_MATCHES)
+        .map((template) => this._scoreTemplateMatch(conversationText, template))
+        .filter((match) => match.score >= this._minimumKeywordMatches)
         .sort((a, b) => b.score - a.score);
     } catch (error) {
       logger.error('Error getting all matches:', error);

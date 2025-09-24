@@ -1,4 +1,4 @@
-import { templateService, type Template } from './templateService';
+import { type Template } from './templateService';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
 import { Buffer } from 'node:buffer';
@@ -22,7 +22,7 @@ export class TemplateLoaderService {
   /**
    * Download and extract template using server-side API
    */
-  private async downloadAndExtractTemplate(template: Template): Promise<ExtractedFile[]> {
+  private async _downloadAndExtractTemplate(template: Template): Promise<ExtractedFile[]> {
     try {
       logger.info(`Downloading template via API: ${template.name}`);
 
@@ -34,16 +34,18 @@ export class TemplateLoaderService {
         },
         body: JSON.stringify({
           templateId: template.id,
-          action: 'download'
-        })
+          action: 'download',
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(`Template download API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`);
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(
+          `Template download API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`,
+        );
       }
 
-      const result = await response.json() as {
+      const result = (await response.json()) as {
         success: boolean;
         files?: ExtractedFile[];
         error?: string;
@@ -69,7 +71,7 @@ export class TemplateLoaderService {
   /**
    * Apply extracted template files to the workbench
    */
-  private async applyTemplateToWorkbench(files: ExtractedFile[]): Promise<void> {
+  private async _applyTemplateToWorkbench(files: ExtractedFile[]): Promise<void> {
     try {
       logger.info(`Applying ${files.length} files to workbench`);
 
@@ -96,7 +98,7 @@ export class TemplateLoaderService {
   /**
    * Determine if a file should be treated as text based on its extension
    */
-  private isTextFile(filePath: string): boolean {
+  private _isTextFile(filePath: string): boolean {
     const textExtensions = [
       '.js',
       '.jsx',
@@ -166,14 +168,14 @@ export class TemplateLoaderService {
       logger.info(`Loading template into workbench: ${template.name}`);
 
       // Download and extract template
-      const extractedFiles = await this.downloadAndExtractTemplate(template);
+      const extractedFiles = await this._downloadAndExtractTemplate(template);
 
       if (extractedFiles.length === 0) {
         throw new Error('No files found in template');
       }
 
       // Apply to workbench
-      await this.applyTemplateToWorkbench(extractedFiles);
+      await this._applyTemplateToWorkbench(extractedFiles);
 
       const result: TemplateLoadResult = {
         success: true,
@@ -237,19 +239,19 @@ export class TemplateLoaderService {
         },
         body: JSON.stringify({
           templateId: template.id,
-          action: 'validate'
-        })
+          action: 'validate',
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as { error?: string };
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
         return {
           canLoad: false,
-          reason: `Template validation API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`
+          reason: `Template validation API failed: ${response.status} ${response.statusText}. ${errorData.error || ''}`,
         };
       }
 
-      const result = await response.json() as {
+      const result = (await response.json()) as {
         success: boolean;
         validation?: { canLoad: boolean; reason?: string };
         error?: string;
@@ -258,18 +260,19 @@ export class TemplateLoaderService {
       if (!result.success) {
         return {
           canLoad: false,
-          reason: `Template validation failed: ${result.error}`
+          reason: `Template validation failed: ${result.error}`,
         };
       }
 
       if (!result.validation) {
         return {
           canLoad: false,
-          reason: 'No validation result returned from API'
+          reason: 'No validation result returned from API',
         };
       }
 
       logger.info(`✅ Template validation result: canLoad=${result.validation.canLoad}`);
+
       return result.validation;
     } catch (error) {
       return {

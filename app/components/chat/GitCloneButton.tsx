@@ -187,7 +187,6 @@ ${escapeBoltTags(file.content)}
         </div>
       </Button>
 
-
       {/* GitHub Repository Selection */}
       {isDialogOpen && selectedProvider === 'github' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -223,7 +222,6 @@ ${escapeBoltTags(file.content)}
           </div>
         </div>
       )}
-
 
       {loading && <LoadingOverlay message="Please wait while we clone the repository..." />}
     </>

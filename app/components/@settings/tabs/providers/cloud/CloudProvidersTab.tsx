@@ -15,13 +15,7 @@ import { FaBrain } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
 
 // Add type for provider names to ensure type safety
-type ProviderName =
-  | 'Anthropic'
-  | 'Github'
-  | 'OpenAI'
-  | 'LMStudio'
-  | 'Ollama'
-  | 'OpenAILike';
+type ProviderName = 'Anthropic' | 'Github' | 'OpenAI' | 'LMStudio' | 'Ollama' | 'OpenAILike';
 
 // Update the PROVIDER_ICONS type to use the ProviderName type
 const PROVIDER_ICONS: Record<ProviderName, IconType> = {

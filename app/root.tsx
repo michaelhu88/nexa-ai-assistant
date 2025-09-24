@@ -13,6 +13,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
 import xtermStyles from '@xterm/xterm/css/xterm.css?url';
+import animationStyles from './styles/animations.css?url';
 
 import 'virtual:uno.css';
 
@@ -26,6 +27,7 @@ export const links: LinksFunction = () => [
   { rel: 'stylesheet', href: tailwindReset },
   { rel: 'stylesheet', href: globalStyles },
   { rel: 'stylesheet', href: xtermStyles },
+  { rel: 'stylesheet', href: animationStyles },
   {
     rel: 'preconnect',
     href: 'https://fonts.googleapis.com',
