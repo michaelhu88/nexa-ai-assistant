@@ -679,7 +679,7 @@ export class WorkbenchStore {
   }
 
   async pushToRepository(
-    provider: 'github' | 'gitlab',
+    provider: 'github',
     repoName: string,
     commitMessage?: string,
     username?: string,
@@ -688,14 +688,11 @@ export class WorkbenchStore {
     branchName: string = 'main',
   ) {
     try {
-      const isGitHub = provider === 'github';
-      const isGitLab = provider === 'gitlab';
-
-      const authToken = token || Cookies.get(isGitHub ? 'githubToken' : 'gitlabToken');
-      const owner = username || Cookies.get(isGitHub ? 'githubUsername' : 'gitlabUsername');
+      const authToken = token || Cookies.get('githubToken');
+      const owner = username || Cookies.get('githubUsername');
 
       if (!authToken || !owner) {
-        throw new Error(`${provider} token or username is not set in cookies or provided.`);
+        throw new Error('GitHub token or username is not set in cookies or provided.');
       }
 
       const files = this.files.get();
@@ -704,7 +701,7 @@ export class WorkbenchStore {
         throw new Error('No files found to push');
       }
 
-      if (isGitHub) {
+      // GitHub implementation
         // Initialize Octokit with the auth token
         const octokit = new Octokit({ auth: authToken });
 
@@ -770,13 +767,6 @@ export class WorkbenchStore {
             console.error('Cannot create repo:', error);
             throw error; // Some other error occurred
           }
-        }
-
-        // Get all files
-        const files = this.files.get();
-
-        if (!files || Object.keys(files).length === 0) {
-          throw new Error('No files found to push');
         }
 
         // Function to push files with retry logic
@@ -873,67 +863,8 @@ export class WorkbenchStore {
         // Execute the push function with retry logic
         const repoUrl = await pushFilesToRepo();
 
-        // Return the repository URL
-        return repoUrl;
-      }
-
-      if (isGitLab) {
-        const { GitLabApiService: gitLabApiServiceClass } = await import('~/lib/services/gitlabApiService');
-        const gitLabApiService = new gitLabApiServiceClass(authToken, 'https://gitlab.com');
-
-        // Check or create repo
-        let repo = await gitLabApiService.getProject(owner, repoName);
-
-        if (!repo) {
-          repo = await gitLabApiService.createProject(repoName, isPrivate);
-          await new Promise((r) => setTimeout(r, 2000)); // Wait for repo initialization
-        }
-
-        // Check if branch exists, create if not
-        const branchRes = await gitLabApiService.getFile(repo.id, 'README.md', branchName).catch(() => null);
-
-        if (!branchRes || !branchRes.ok) {
-          // Create branch from default
-          await gitLabApiService.createBranch(repo.id, branchName, repo.default_branch);
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-
-        const actions = Object.entries(files).reduce(
-          (acc, [filePath, dirent]) => {
-            if (dirent?.type === 'file' && dirent.content) {
-              acc.push({
-                action: 'create',
-                file_path: extractRelativePath(filePath),
-                content: dirent.content,
-              });
-            }
-
-            return acc;
-          },
-          [] as { action: 'create' | 'update'; file_path: string; content: string }[],
-        );
-
-        // Check which files exist and update action accordingly
-        for (const action of actions) {
-          const fileCheck = await gitLabApiService.getFile(repo.id, action.file_path, branchName);
-
-          if (fileCheck.ok) {
-            action.action = 'update';
-          }
-        }
-
-        // Commit all files
-        await gitLabApiService.commitFiles(repo.id, {
-          branch: branchName,
-          commit_message: commitMessage || 'Commit multiple files',
-          actions,
-        });
-
-        return repo.web_url;
-      }
-
-      // Should not reach here since we only handle GitHub and GitLab
-      throw new Error(`Unsupported provider: ${provider}`);
+      // Return the repository URL
+      return repoUrl;
     } catch (error) {
       console.error('Error pushing to repository:', error);
       throw error; // Rethrow the error for further handling
